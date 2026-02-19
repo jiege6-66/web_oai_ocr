@@ -6,8 +6,9 @@
   <title>{{ title }}</title>
   <link rel="icon" href="{{ favicon_url }}" type="image/x-icon">
   <style>
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       margin: 0;
       padding: 0;
       display: flex;
@@ -16,6 +17,7 @@
       justify-content: center;
       height: 100vh;
       background-color: #1D1F20;
+      color: #ccc;
     }
     .container {
       display: flex;
@@ -23,7 +25,6 @@
       max-width: 100%;
       height: 80%;
       gap: 20px;
-      color: grey;
     }
     .upload-box, .output-box {
       flex: 1;
@@ -45,37 +46,28 @@
     .upload-box img {
       max-width: 100%;
       max-height: 100%;
-      object-fit: cover; /* 保持比例并填满容器 */
+      object-fit: cover;
       margin-top: 10px;
     }
-
     .output-box {
       display: flex;
       flex-direction: column;
-      flex: 1;
-      border: 2px dashed grey;
-      padding: 20px;
-      border-radius: 8px;
-      background-color: #181A1B;
-      position: relative;
-      color: grey;
     }
-
     .output-box textarea {
-      flex: 2; /* 设置textarea占2份 */
+      flex: 2;
       width: 100%;
       margin-bottom: 10px;
       padding: 10px;
       background-color: #121212;
       font-size: 14px;
-      border: 1px solid #ccc;
+      border: 1px solid #333;
       border-radius: 4px;
       color: white;
+      resize: none;
     }
-
     .output-box .markdown-preview {
-      flex: 3; /* 设置markdown-preview占3份 */
-      border: 1px solid #ccc;
+      flex: 3;
+      border: 1px solid #333;
       padding: 10px;
       background-color: #121212;
       border-radius: 4px;
@@ -91,32 +83,25 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
-      text-decoration: none;
     }
-    .copy-btn:hover {
-      background-color: #0056b3;
-    }
+    .copy-btn:hover { background-color: #0056b3; }
     .loading-overlay {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(105, 105, 105, 0.8);
-      display: flex;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(30, 30, 30, 0.85);
+      display: none;
       justify-content: center;
       align-items: center;
       font-size: 16px;
       font-weight: bold;
-      color: #333;
-      display: none;
+      color: #aaa;
+      border-radius: 8px;
     }
-    .loading-overlay.active {
-      display: flex;
-    }
+    .loading-overlay.active { display: flex; }
 
-    /* GitHub 图标样式 */
-    .github-link {
+    /* 设置按钮 */
+    .settings-toggle {
       position: fixed;
       top: 20px;
       right: 20px;
@@ -127,34 +112,222 @@
       align-items: center;
       background-color: #333;
       border-radius: 50%;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      z-index: 1001;
+      border: none;
+      color: white;
+      font-size: 20px;
+      transition: background-color 0.2s;
+    }
+    .settings-toggle:hover { background-color: #555; }
+
+    /* GitHub 链接 */
+    .github-link {
+      position: fixed;
+      top: 20px;
+      right: 70px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #333;
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
       text-decoration: none;
+      z-index: 1001;
+    }
+    .github-icon { width: 24px; height: 24px; filter: invert(1); }
+
+    /* 设置面板 */
+    .settings-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+    }
+    .settings-overlay.active { display: flex; }
+
+    .settings-panel {
+      background: #222;
+      border-radius: 12px;
+      padding: 30px;
+      width: 480px;
+      max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .settings-panel h2 {
+      margin: 0 0 20px 0;
+      color: #fff;
+      font-size: 20px;
+    }
+    .setting-group {
+      margin-bottom: 16px;
+    }
+    .setting-group label {
+      display: block;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+    .setting-group input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .setting-group input:focus { border-color: #007bff; }
+    .setting-group input::placeholder { color: #666; }
+    .setting-group .hint {
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
     }
 
-    .github-icon {
-      width: 24px;
-      height: 24px;
-      fill: white;
+    .settings-row {
+      display: flex;
+      gap: 12px;
+    }
+    .settings-row .setting-group { flex: 1; }
+
+    .settings-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      justify-content: flex-end;
+    }
+    .btn-save {
+      padding: 10px 24px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn-save:hover { background: #0056b3; }
+    .btn-cancel {
+      padding: 10px 24px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn-cancel:hover { background: #555; }
+
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 3000;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+
+    /* 当前配置指示器 */
+    .config-indicator {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 12px;
+      color: #888;
+      z-index: 1001;
+    }
+    .config-indicator .model-name {
+      color: #4fc3f7;
+      font-weight: bold;
     }
   </style>
-  <!-- 引入 KaTeX 样式 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
 </head>
 <body>
-  <!-- GitHub 图标链接 -->
-  <a href="https://github.com/gua12345/web_oai_img2text" target="_blank" class="github-link">
+
+  <!-- 设置按钮 -->
+  <button class="settings-toggle" id="settings-toggle" title="设置">⚙</button>
+
+  <!-- GitHub 链接 -->
+  <a href="https://github.com/gua12345/web_oai_ocr" target="_blank" class="github-link">
     <img src="https://cdn.jsdelivr.net/npm/simple-icons@v6/icons/github.svg" alt="GitHub" class="github-icon">
   </a>
 
+  <!-- 当前配置指示器 -->
+  <div class="config-indicator" id="config-indicator">
+    模型: <span class="model-name" id="current-model">-</span>
+  </div>
+
+  <!-- 设置面板 -->
+  <div class="settings-overlay" id="settings-overlay">
+    <div class="settings-panel">
+      <h2>⚙ API 设置</h2>
+
+      <div class="setting-group">
+        <label>API Base URL</label>
+        <input type="text" id="set-api-base" placeholder="https://api.openai.com">
+        <div class="hint">不带路径，如 https://api.openai.com</div>
+      </div>
+
+      <div class="setting-group">
+        <label>API Key</label>
+        <input type="password" id="set-api-key" placeholder="留空则不修改">
+        <div class="hint">留空表示不修改当前 Key</div>
+      </div>
+
+      <div class="setting-group">
+        <label>模型</label>
+        <input type="text" id="set-model" placeholder="gpt-4o">
+      </div>
+
+      <div class="settings-row">
+        <div class="setting-group">
+          <label>并发数</label>
+          <input type="number" id="set-concurrency" min="1" max="20" placeholder="5">
+        </div>
+        <div class="setting-group">
+          <label>最大重试次数</label>
+          <input type="number" id="set-retries" min="1" max="20" placeholder="5">
+        </div>
+      </div>
+
+      <div class="settings-actions">
+        <button class="btn-cancel" id="btn-cancel">取消</button>
+        <button class="btn-save" id="btn-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
   <div class="container">
-    <!-- 上传图片/文件框 -->
     <div class="upload-box" id="upload-box">
-      点击或拖拽文件到此上传<br>
-      支持图片和PDF文件
+      点击或拖拽文件到此上传<br>支持图片和PDF文件
       <img id="preview-img" style="display: none;">
       <div class="loading-overlay" id="loading-overlay">正在处理...</div>
     </div>
-    <!-- 输出框 -->
     <div class="output-box">
       <div class="markdown-preview" id="markdown-preview"></div>
       <textarea id="raw-text" placeholder="原始文本 (Markdown 格式)"></textarea>
@@ -163,6 +336,7 @@
   </div>
 
   <script>
+    const baseUrl = "{{ backurl }}" || window.location.origin + window.location.pathname;
     const uploadBox = document.getElementById("upload-box");
     const rawText = document.getElementById("raw-text");
     const markdownPreview = document.getElementById("markdown-preview");
@@ -170,32 +344,108 @@
     const previewImg = document.getElementById("preview-img");
     const loadingOverlay = document.getElementById("loading-overlay");
 
-    // 上传文件事件
+    // ===== 设置面板逻辑 =====
+    const settingsToggle = document.getElementById("settings-toggle");
+    const settingsOverlay = document.getElementById("settings-overlay");
+    const btnCancel = document.getElementById("btn-cancel");
+    const btnSave = document.getElementById("btn-save");
+    const toastEl = document.getElementById("toast");
+
+    function showToast(msg, duration = 2000) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), duration);
+    }
+
+    // 加载当前设置
+    async function loadSettings() {
+      try {
+        const res = await fetch(`${baseUrl}/api/settings`);
+        const data = await res.json();
+        document.getElementById("set-api-base").value = data.api_base_url || "";
+        document.getElementById("set-api-key").value = "";
+        document.getElementById("set-api-key").placeholder = data.api_key_masked || "留空则不修改";
+        document.getElementById("set-model").value = data.model || "";
+        document.getElementById("set-concurrency").value = data.concurrency || 5;
+        document.getElementById("set-retries").value = data.max_retries || 5;
+        document.getElementById("current-model").textContent = data.model || "-";
+      } catch (e) {
+        console.error("加载设置失败", e);
+      }
+    }
+
+    settingsToggle.addEventListener("click", () => {
+      loadSettings();
+      settingsOverlay.classList.add("active");
+    });
+
+    btnCancel.addEventListener("click", () => {
+      settingsOverlay.classList.remove("active");
+    });
+
+    settingsOverlay.addEventListener("click", (e) => {
+      if (e.target === settingsOverlay) settingsOverlay.classList.remove("active");
+    });
+
+    btnSave.addEventListener("click", async () => {
+      const payload = {};
+      const apiBase = document.getElementById("set-api-base").value.trim();
+      const apiKey = document.getElementById("set-api-key").value.trim();
+      const model = document.getElementById("set-model").value.trim();
+      const concurrency = document.getElementById("set-concurrency").value;
+      const retries = document.getElementById("set-retries").value;
+
+      if (apiBase) payload.api_base_url = apiBase;
+      if (apiKey) payload.api_key = apiKey;
+      if (model) payload.model = model;
+      if (concurrency) payload.concurrency = parseInt(concurrency);
+      if (retries) payload.max_retries = parseInt(retries);
+
+      try {
+        const res = await fetch(`${baseUrl}/api/settings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          showToast("✅ 设置已保存");
+          settingsOverlay.classList.remove("active");
+          loadSettings(); // 刷新指示器
+        } else {
+          showToast("❌ 保存失败");
+        }
+      } catch (e) {
+        showToast("❌ 网络错误");
+      }
+    });
+
+    // 页面加载时获取当前模型
+    loadSettings();
+
+    // ===== 上传文件逻辑 =====
     uploadBox.addEventListener("dragover", (e) => {
       e.preventDefault();
       uploadBox.style.borderColor = "#007bff";
     });
-
     uploadBox.addEventListener("dragleave", () => {
-      uploadBox.style.borderColor = "#ccc";
+      uploadBox.style.borderColor = "grey";
     });
-
     uploadBox.addEventListener("drop", (e) => {
       e.preventDefault();
-      uploadBox.style.borderColor = "#ccc";
+      uploadBox.style.borderColor = "grey";
       const file = e.dataTransfer.files[0];
-      resetFields(); // 清空字段
+      resetFields();
       handleFile(file);
       showPreview(file);
     });
-
     uploadBox.addEventListener("click", () => {
       const input = document.createElement("input");
       input.type = "file";
       input.accept = "image/*,.pdf";
       input.onchange = (e) => {
         const file = e.target.files[0];
-        resetFields(); // 清空字段
+        resetFields();
         handleFile(file);
         showPreview(file);
       };
@@ -219,34 +469,30 @@
       const formData = new FormData();
       formData.append("file", file);
 
-      const baseUrl = "{{ backurl }}" || window.location.origin + window.location.pathname;
       const url = file.type.includes("pdf")
           ? `${baseUrl}/process/pdf`
           : `${baseUrl}/process/image`;
 
-      // 显示正在处理提示
       loadingOverlay.classList.add("active");
 
       fetch(url, { method: "POST", body: formData })
         .then((response) => {
-          if (!response.ok) {
-            throw new Error("处理失败！");
-          }
+          if (!response.ok) throw new Error("处理失败！");
           return response.json();
         })
         .then((data) => {
-          loadingOverlay.classList.remove("active"); // 移除正在处理提示
+          loadingOverlay.classList.remove("active");
           if (data.status === "success") {
             rawText.value = data.content;
             updateMarkdownPreview();
           } else {
-            alert("处理失败，请重试！");
+            showToast("❌ 处理失败，请重试");
           }
         })
         .catch((err) => {
-          loadingOverlay.classList.remove("active"); // 移除正在处理提示
+          loadingOverlay.classList.remove("active");
           console.error("上传失败:", err);
-          alert("文件处理失败，请检查后端服务是否正常运行！");
+          showToast("❌ 文件处理失败，请检查设置和后端服务");
         });
     }
 
@@ -256,17 +502,12 @@
       previewImg.style.display = "none";
     }
 
-    // 实时更新 Markdown 预览
     rawText.addEventListener("input", updateMarkdownPreview);
 
     function updateMarkdownPreview() {
       const markdown = rawText.value;
       const html = marked.parse(markdown);
-
-      // 渲染 Markdown 内容
       markdownPreview.innerHTML = html;
-
-      // 使用 KaTeX 渲染公式
       renderMathInElement(markdownPreview, {
         delimiters: [
           { left: "$$", right: "$$", display: true },
@@ -275,14 +516,12 @@
       });
     }
 
-    // 复制按钮功能
     copyBtn.addEventListener("click", () => {
       navigator.clipboard.writeText(rawText.value).then(() => {
-        alert("复制成功！");
+        showToast("✅ 已复制到剪贴板");
       });
     });
   </script>
-  <!-- 引入 marked.js 和 KaTeX -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex/dist/contrib/auto-render.min.js"></script>

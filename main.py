@@ -10,6 +10,7 @@ import aiohttp
 import asyncio
 from fastapi import FastAPI, Request, UploadFile, Query, HTTPException
 import os
+import json
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, Response
@@ -21,16 +22,17 @@ logger = logging.getLogger(__name__)
 # 加载 .env 文件（如果存在）
 load_dotenv()
 
-# 从环境变量中读取配置
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com")
-API_KEY = os.getenv("OPENAI_API_KEY", "sk-111111111")
-MODEL = os.getenv("MODEL", "gpt-4o")
-PASSWORD = os.getenv("PASSWORD", "pwd")
+# 运行时配置（可通过 WebUI 修改）
+runtime_config = {
+    "api_base_url": os.getenv("API_BASE_URL", "https://api.openai.com"),
+    "api_key": os.getenv("OPENAI_API_KEY", "sk-111111111"),
+    "model": os.getenv("MODEL", "gpt-4o"),
+    "concurrency": int(os.getenv("CONCURRENCY", 5)),
+    "max_retries": int(os.getenv("MAX_RETRIES", 5)),
+}
 
-# 并发限制和重试机制
-CONCURRENCY = int(os.getenv("CONCURRENCY", 5))
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", 5))
-RETRY_DELAY = 0.5  # 重试延迟时间（秒）
+PASSWORD = os.getenv("PASSWORD", "pwd")
+RETRY_DELAY = 0.5
 
 # 初始化 FastAPI 应用
 app = FastAPI()
@@ -38,15 +40,12 @@ app = FastAPI()
 # 挂载静态文件目录
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# 环境变量配置
 FAVICON_URL = os.getenv("FAVICON_URL", "/static/favicon.ico")
 TITLE = os.getenv("TITLE", "呱呱的oai图转文")
 BACK_URL = os.getenv("BACK_URL", "")
 
-# 配置 Jinja2 模板目录
 templates = Jinja2Templates(directory="templates")
 
-# 跨域支持
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -56,8 +55,56 @@ app.add_middleware(
 )
 
 
-async def process_image(session, image_data, semaphore, max_retries=MAX_RETRIES):
+# ========== 设置 API ==========
+
+@app.get(f"/{PASSWORD}/api/settings" if PASSWORD else "/api/settings")
+async def get_settings():
+    """获取当前设置（API Key 脱敏显示）"""
+    masked_key = runtime_config["api_key"]
+    if len(masked_key) > 8:
+        masked_key = masked_key[:4] + "*" * (len(masked_key) - 8) + masked_key[-4:]
+    return JSONResponse({
+        "api_base_url": runtime_config["api_base_url"],
+        "api_key_masked": masked_key,
+        "model": runtime_config["model"],
+        "concurrency": runtime_config["concurrency"],
+        "max_retries": runtime_config["max_retries"],
+    })
+
+
+@app.post(f"/{PASSWORD}/api/settings" if PASSWORD else "/api/settings")
+async def update_settings(request: Request):
+    """更新设置"""
+    data = await request.json()
+    if "api_base_url" in data and data["api_base_url"].strip():
+        # 去除末尾斜杠
+        runtime_config["api_base_url"] = data["api_base_url"].strip().rstrip("/")
+    if "api_key" in data and data["api_key"].strip():
+        runtime_config["api_key"] = data["api_key"].strip()
+    if "model" in data and data["model"].strip():
+        runtime_config["model"] = data["model"].strip()
+    if "concurrency" in data:
+        try:
+            runtime_config["concurrency"] = max(1, int(data["concurrency"]))
+        except (ValueError, TypeError):
+            pass
+    if "max_retries" in data:
+        try:
+            runtime_config["max_retries"] = max(1, int(data["max_retries"]))
+        except (ValueError, TypeError):
+            pass
+
+    logger.info(f"设置已更新: model={runtime_config['model']}, base_url={runtime_config['api_base_url']}, concurrency={runtime_config['concurrency']}")
+    return JSONResponse({"status": "success", "message": "设置已更新"})
+
+
+# ========== OCR 处理 ==========
+
+async def process_image(session, image_data, semaphore, max_retries=None):
     """使用 OCR 识别图像并进行 Markdown 格式化"""
+    if max_retries is None:
+        max_retries = runtime_config["max_retries"]
+
     system_prompt = """
     OCR识别图片上的内容，给出markdown的katex的格式的内容。
     选择题的序号使用A. B.依次类推。
@@ -84,8 +131,8 @@ async def process_image(session, image_data, semaphore, max_retries=MAX_RETRIES)
             async with semaphore:
                 encoded_image = base64.b64encode(image_data).decode('utf-8')
                 response = await session.post(
-                    f"{API_BASE_URL}/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {API_KEY}"},
+                    f"{runtime_config['api_base_url']}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {runtime_config['api_key']}"},
                     json={
                         "messages": [
                             {
@@ -109,7 +156,7 @@ async def process_image(session, image_data, semaphore, max_retries=MAX_RETRIES)
                             }
                         ],
                         "stream": False,
-                        "model": MODEL,
+                        "model": runtime_config["model"],
                         "temperature": 0.5,
                         "presence_penalty": 0,
                         "frequency_penalty": 0,
@@ -124,15 +171,10 @@ async def process_image(session, image_data, semaphore, max_retries=MAX_RETRIES)
         except Exception as e:
             if attempt == max_retries - 1:
                 return f"识别失败: {str(e)}"
-            await asyncio.sleep(2 * attempt)  # 指数退避
+            await asyncio.sleep(2 * attempt)
+
 
 def pdf_to_images(pdf_bytes: bytes, dpi: int = 300) -> list:
-    """
-    使用 PyMuPDF 将 PDF 转换为图片。
-    :param pdf_bytes: PDF 文件的字节数据。
-    :param dpi: 图像分辨率 (300 DPI)。
-    :return: PIL 图像列表。
-    """
     images = []
     try:
         pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -176,6 +218,7 @@ async def upload_image_to_endpoint(image_data: bytes, page_number: int, semaphor
         logger.error(f"第 {page_number} 页处理异常: {e}")
         return f"第 {page_number} 页处理异常: {e}"
 
+
 @app.post(f"/{PASSWORD}/process/image" if PASSWORD else "/process/image")
 async def process_image_endpoint(file: UploadFile):
     if not file:
@@ -186,9 +229,9 @@ async def process_image_endpoint(file: UploadFile):
         if not file_data:
             raise HTTPException(status_code=400, detail="文件内容为空")
 
-        semaphore = asyncio.Semaphore(CONCURRENCY)
+        semaphore = asyncio.Semaphore(runtime_config["concurrency"])
 
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(runtime_config["max_retries"]):
             try:
                 async with aiohttp.ClientSession() as session:
                     result = await process_image(session, file_data, semaphore)
@@ -203,14 +246,14 @@ async def process_image_endpoint(file: UploadFile):
                     content = content.replace("```markdown", "").replace("```", "").strip()
                     return JSONResponse({"status": "success", "content": content})
 
-                if attempt < MAX_RETRIES - 1:
+                if attempt < runtime_config["max_retries"] - 1:
                     await asyncio.sleep(RETRY_DELAY * (attempt + 1))
                     continue
 
                 raise HTTPException(status_code=500, detail="图片处理失败，返回了无效数据")
 
             except Exception as e:
-                if attempt == MAX_RETRIES - 1:
+                if attempt == runtime_config["max_retries"] - 1:
                     logger.error(f"图片处理最终失败: {e}")
                     raise HTTPException(status_code=500, detail=str(e))
                 await asyncio.sleep(RETRY_DELAY * (attempt + 1))
@@ -233,7 +276,7 @@ async def process_pdf_endpoint(file: UploadFile):
         images = pdf_to_images(pdf_data, dpi=300)
         logger.info(f"PDF 文件成功转换为 {len(images)} 页图片")
 
-        semaphore = asyncio.Semaphore(CONCURRENCY)
+        semaphore = asyncio.Semaphore(runtime_config["concurrency"])
         tasks = []
 
         for page_number, image in enumerate(images, start=1):
